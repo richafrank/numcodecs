@@ -55,6 +55,8 @@ if PY2 and os.name == 'nt':
 # The latter is often absent from modern macOS systems.
 if sys.platform == 'darwin':
     base_compile_args.append('-stdlib=libc++')
+# Allow setting the Blosc dir if installed in the system
+BLOSC_DIR = os.environ.get('BLOSC_DIR', '')
 
 
 def info(*msg):
@@ -73,34 +75,42 @@ def blosc_extension():
     extra_compile_args = list(base_compile_args)
     define_macros = []
 
-    # setup blosc sources
-    blosc_sources = [f for f in glob('c-blosc/blosc/*.c')
-                     if 'avx2' not in f and 'sse2' not in f]
-    include_dirs = [os.path.join('c-blosc', 'blosc')]
+    if not BLOSC_DIR:
+        # setup blosc sources
+        blosc_sources = [f for f in glob('c-blosc/blosc/*.c')
+                         if 'avx2' not in f and 'sse2' not in f]
+        include_dirs = [os.path.join('c-blosc', 'blosc')]
 
-    # add internal complibs
-    blosc_sources += glob('c-blosc/internal-complibs/lz4*/*.c')
-    blosc_sources += glob('c-blosc/internal-complibs/snappy*/*.cc')
-    blosc_sources += glob('c-blosc/internal-complibs/zlib*/*.c')
-    blosc_sources += glob('c-blosc/internal-complibs/zstd*/common/*.c')
-    blosc_sources += glob('c-blosc/internal-complibs/zstd*/compress/*.c')
-    blosc_sources += glob('c-blosc/internal-complibs/zstd*/decompress/*.c')
-    blosc_sources += glob('c-blosc/internal-complibs/zstd*/dictBuilder/*.c')
-    include_dirs += [d for d in glob('c-blosc/internal-complibs/*')
-                     if os.path.isdir(d)]
-    include_dirs += [d for d in glob('c-blosc/internal-complibs/*/*')
-                     if os.path.isdir(d)]
-    define_macros += [('HAVE_LZ4', 1),
-                      ('HAVE_SNAPPY', 1),
-                      ('HAVE_ZLIB', 1),
-                      ('HAVE_ZSTD', 1)]
+        # add internal complibs
+        blosc_sources += glob('c-blosc/internal-complibs/lz4*/*.c')
+        blosc_sources += glob('c-blosc/internal-complibs/snappy*/*.cc')
+        blosc_sources += glob('c-blosc/internal-complibs/zlib*/*.c')
+        blosc_sources += glob('c-blosc/internal-complibs/zstd*/common/*.c')
+        blosc_sources += glob('c-blosc/internal-complibs/zstd*/compress/*.c')
+        blosc_sources += glob('c-blosc/internal-complibs/zstd*/decompress/*.c')
+        blosc_sources += glob('c-blosc/internal-complibs/zstd*/dictBuilder/*.c')
+        include_dirs += [d for d in glob('c-blosc/internal-complibs/*')
+                         if os.path.isdir(d)]
+        include_dirs += [d for d in glob('c-blosc/internal-complibs/*/*')
+                         if os.path.isdir(d)]
+        define_macros += [('HAVE_LZ4', 1),
+                         ('HAVE_SNAPPY', 1),
+                         ('HAVE_ZLIB', 1),
+                         ('HAVE_ZSTD', 1)]
+        lib_dirs = []
+    else:
+        blosc_sources = []
+        include_dirs = [os.path.join(BLOSC_DIR, 'include')]
+        lib_dirs = [os.path.join(BLOSC_DIR, 'lib')]
+
     # define_macros += [('CYTHON_TRACE', '1')]
 
     # SSE2
     if have_sse2 and not disable_sse2:
         info('compiling Blosc extension with SSE2 support')
         extra_compile_args.append('-DSHUFFLE_SSE2_ENABLED')
-        blosc_sources += [f for f in glob('c-blosc/blosc/*.c') if 'sse2' in f]
+        if not BLOSC_DIR:
+            blosc_sources += [f for f in glob('c-blosc/blosc/*.c') if 'sse2' in f]
         if os.name == 'nt':
             define_macros += [('__SSE2__', 1)]
     else:
@@ -110,7 +120,8 @@ def blosc_extension():
     if have_avx2 and not disable_avx2:
         info('compiling Blosc extension with AVX2 support')
         extra_compile_args.append('-DSHUFFLE_AVX2_ENABLED')
-        blosc_sources += [f for f in glob('c-blosc/blosc/*.c') if 'avx2' in f]
+        if not BLOSC_DIR:
+            blosc_sources += [f for f in glob('c-blosc/blosc/*.c') if 'avx2' in f]
         if os.name == 'nt':
             define_macros += [('__AVX2__', 1)]
     else:
@@ -126,6 +137,7 @@ def blosc_extension():
         Extension('numcodecs.blosc',
                   sources=sources + blosc_sources,
                   include_dirs=include_dirs,
+                  library_dirs=lib_dirs,
                   define_macros=define_macros,
                   extra_compile_args=extra_compile_args,
                   ),
@@ -145,15 +157,19 @@ def zstd_extension():
     include_dirs = []
     define_macros = []
 
-    # setup sources - use zstd bundled in blosc
-    zstd_sources += glob('c-blosc/internal-complibs/zstd*/common/*.c')
-    zstd_sources += glob('c-blosc/internal-complibs/zstd*/compress/*.c')
-    zstd_sources += glob('c-blosc/internal-complibs/zstd*/decompress/*.c')
-    zstd_sources += glob('c-blosc/internal-complibs/zstd*/dictBuilder/*.c')
-    include_dirs += [d for d in glob('c-blosc/internal-complibs/zstd*')
-                     if os.path.isdir(d)]
-    include_dirs += [d for d in glob('c-blosc/internal-complibs/zstd*/*')
-                     if os.path.isdir(d)]
+    if not BLOSC_DIR:
+        # setup sources - use zstd bundled in blosc
+        zstd_sources += glob('c-blosc/internal-complibs/zstd*/common/*.c')
+        zstd_sources += glob('c-blosc/internal-complibs/zstd*/compress/*.c')
+        zstd_sources += glob('c-blosc/internal-complibs/zstd*/decompress/*.c')
+        zstd_sources += glob('c-blosc/internal-complibs/zstd*/dictBuilder/*.c')
+        include_dirs += [d for d in glob('c-blosc/internal-complibs/zstd*')
+                         if os.path.isdir(d)]
+        include_dirs += [d for d in glob('c-blosc/internal-complibs/zstd*/*')
+                         if os.path.isdir(d)]
+    else:
+        include_dirs += [os.path.join(BLOSC_DIR, 'include')]
+
     # define_macros += [('CYTHON_TRACE', '1')]
 
     if have_cython:
@@ -183,9 +199,16 @@ def lz4_extension():
     extra_compile_args = list(base_compile_args)
     define_macros = []
 
-    # setup sources - use LZ4 bundled in blosc
-    lz4_sources = glob('c-blosc/internal-complibs/lz4*/*.c')
-    include_dirs = [d for d in glob('c-blosc/internal-complibs/lz4*') if os.path.isdir(d)]
+    if not BLOSC_DIR:
+        # setup sources - use LZ4 bundled in blosc
+        lz4_sources = glob('c-blosc/internal-complibs/lz4*/*.c')
+        include_dirs = [d for d in glob('c-blosc/internal-complibs/lz4*') if os.path.isdir(d)]
+        lib_dirs = []
+    else:
+        lz4_sources = []
+        include_dirs = [os.path.join(BLOSC_DIR, 'include')]
+        lib_dirs = [os.path.join(BLOSC_DIR, 'lib')]
+
     include_dirs += ['numcodecs']
     # define_macros += [('CYTHON_TRACE', '1')]
 
@@ -199,6 +222,7 @@ def lz4_extension():
         Extension('numcodecs.lz4',
                   sources=sources + lz4_sources,
                   include_dirs=include_dirs,
+                  library_dirs=lib_dirs,
                   define_macros=define_macros,
                   extra_compile_args=extra_compile_args,
                   ),
